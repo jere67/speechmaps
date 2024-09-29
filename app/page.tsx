@@ -1,13 +1,16 @@
-import Hero from "@/components/hero";
-import Map from "@/components/Map";
-import ConnectSupabaseSteps from "@/components/tutorial/connect-supabase-steps";
-import SignUpUserSteps from "@/components/tutorial/sign-up-user-steps";
-import { hasEnvVars } from "@/utils/supabase/check-env-vars";
+// app/page.tsx
+import React from 'react';
+import Map from '../components/Map';
+import VoiceInput from '../components/VoiceInput';
 
-export default async function Index() {
+const HomePage: React.FC = () => {
   return (
-    <main>
+    <div>
+      <h1>Your Map Application</h1>
       <Map />
-    </main>
+      <VoiceInput />
+    </div>
   );
-}
+};
+
+export default HomePage;
