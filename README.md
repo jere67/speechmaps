@@ -16,7 +16,7 @@
   </a>
 </p>
 
-SpeechMaps is an innovative navigation solution that optimizes your travel routes by dynamically reconfiguring them with AI based on real-time traffic incidents. Unlike conventional GPS applications that may not promptly update route conditions, SpeechMaps allows users to report accidents directly through voice input, ensuring immediate updates to avoid congested or blocked areas.
+SpeechMaps is an innovative navigation solution that optimizes your travel routes by dynamically reconfiguring them with AI based on real-time traffic incidents. Unlike conventional GPS applications that may not promptly update route conditions, SpeechMaps allows users to report accidents directly through voice input, ensuring immediate updates to avoid congested or blocked areas and uploading the incident for all users connected to the SpeechMaps network.
 
 ## ⭐ Features
 - ⚡️ Next.js 14 with App Router
