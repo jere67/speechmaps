@@ -1,4 +1,3 @@
-// app/components/Map.tsx
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -10,6 +9,9 @@ import {
   Autocomplete,
 } from '@react-google-maps/api';
 import { supabase } from '../lib/supabaseClient';
+import { ChevronLeft, ChevronRight, MapPin, Navigation, Route } from 'lucide-react';
+import VoiceInput from './VoiceInput';
+import { Loading } from './ui/Loading';
 
 interface Report {
   id: string;
@@ -17,130 +19,80 @@ interface Report {
   longitude: number;
 }
 
+interface RouteInfo {
+  duration: string;
+  arrivalTime: string;
+  description: string;
+  distance: string;
+}
+
 const Map: React.FC = () => {
-  // State to hold accident markers
-  const [markers, setMarkers] = useState<
-    Array<{ id: string; position: google.maps.LatLngLiteral }>
-  >([]);
-
-  // Center of the map
-  const [center, setCenter] = useState<google.maps.LatLngLiteral>({
-    lat: 42.279594,
-    lng: -83.732124,
-  });
-
-  // State for start and end locations
-  const [startLocation, setStartLocation] = useState('');
-  const [endLocation, setEndLocation] = useState('');
-
-  // State to hold all valid routes
+  const [markers, setMarkers] = useState<Array<{ id: string; position: google.maps.LatLngLiteral }>>([]);
+  const [center, setCenter] = useState<google.maps.LatLngLiteral>({ lat: 42.279594, lng: -83.732124 });
+  const [startLocation, setStartLocation] = useState<google.maps.LatLngLiteral | null>(null);
+  const [endLocation, setEndLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [routes, setRoutes] = useState<google.maps.DirectionsRoute[]>([]);
-
-  // State to hold accident coordinates for avoidance
+  const [routeInfos, setRouteInfos] = useState<RouteInfo[]>([]);
   const [accidentCoords, setAccidentCoords] = useState<google.maps.LatLngLiteral[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Define colors for polylines
   const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFA500', '#800080'];
 
-  // Load Google Maps API
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
     libraries: ['places', 'geometry'],
   });
 
-  // Refs for Autocomplete components
   const originRef = useRef<google.maps.places.Autocomplete | null>(null);
   const destinationRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   useEffect(() => {
-    if (!isLoaded) {
-      console.log('Google Maps API not loaded yet');
-      return;
-    }
+    if (!isLoaded) return;
 
-    console.log('Google Maps API loaded');
-    console.log('Map component mounted');
-
-    // Fetch accident reports from Supabase
     const fetchReports = async () => {
-      console.log('Fetching reports from Supabase');
-      const { data, error } = await supabase
-        .from('reports')
-        .select('id, latitude, longitude');
-
+      const { data, error } = await supabase.from('reports').select('id, latitude, longitude');
       if (error) {
         console.error('Error fetching reports:', error);
       } else if (data) {
-        console.log('Reports fetched:', data);
         const markersData = data
-          .filter(
-            (report) => report.latitude !== null && report.longitude !== null
-          )
+          .filter((report) => report.latitude !== null && report.longitude !== null)
           .map((report) => ({
             id: report.id,
             position: { lat: report.latitude!, lng: report.longitude! },
           }));
-        console.log('Markers after fetching:', markersData);
         setMarkers(markersData);
         setAccidentCoords(markersData.map((marker) => marker.position));
-        console.log('Accident coordinates:', markersData.map((marker) => marker.position));
       }
     };
 
     fetchReports();
 
-    // Set up real-time subscription for new accident reports
     const channel = supabase
       .channel('reports')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'reports' },
-        (payload) => {
-          console.log('New report inserted:', payload.new);
-          const newReport = payload.new as Report;
-          if (newReport.latitude !== null && newReport.longitude !== null) {
-            const newMarker = {
-              id: newReport.id,
-              position: {
-                lat: newReport.latitude!,
-                lng: newReport.longitude!,
-              },
-            };
-            setMarkers((prevMarkers) => {
-              const updatedMarkers = [...prevMarkers, newMarker];
-              console.log('Markers after new report:', updatedMarkers);
-              return updatedMarkers;
-            });
-            setAccidentCoords((prevCoords) => {
-              const updatedCoords = [...prevCoords, newMarker.position];
-              console.log('Updated accident coordinates:', updatedCoords);
-              // Recalculate routes with updated accident coordinates
-              calculateRoute(updatedCoords);
-              return updatedCoords;
-            });            
-          } else {
-            console.error('New report has invalid coordinates:', newReport);
-          }
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, (payload) => {
+        const newReport = payload.new as Report;
+        if (newReport.latitude !== null && newReport.longitude !== null) {
+          const newMarker = {
+            id: newReport.id,
+            position: { lat: newReport.latitude!, lng: newReport.longitude! },
+          };
+          setMarkers((prevMarkers) => [...prevMarkers, newMarker]);
+          setAccidentCoords((prevCoords) => {
+            const updatedCoords = [...prevCoords, newMarker.position];
+            calculateRoute(updatedCoords);
+            return updatedCoords;
+          });
         }
-      )
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-      });
+      })
+      .subscribe();
 
     return () => {
-      console.log('Map component unmounted');
       supabase.removeChannel(channel);
     };
   }, [isLoaded]);
 
-  // Function to calculate routes
   const calculateRoute = (currentAccidentCoords?: google.maps.LatLngLiteral[]) => {
     const accidents = currentAccidentCoords || accidentCoords;
-
-    console.log('calculateRoute called');
-    console.log('Start location:', startLocation);
-    console.log('End location:', endLocation);
-    console.log('Accident coordinates:', accidents);
 
     if (!startLocation || !endLocation) {
       alert('Please enter both start and destination addresses.');
@@ -157,24 +109,16 @@ const Map: React.FC = () => {
         provideRouteAlternatives: true,
       },
       (result, status) => {
-        console.log('DirectionsService callback called');
-        console.log('Status:', status);
-        console.log('Result:', result);
-
         if (status === 'OK' && result) {
-          // **Clear existing routes**
           setRoutes([]);
 
-          // **If there are no accident coordinates, add all routes**
           if (accidents.length === 0) {
-            console.log('No accident coordinates. Adding all routes.');
             setRoutes(result.routes);
+            processRoutes(result.routes);
             return;
           }
 
-          // **Filter out routes that pass through accident locations using detailed path points**
           const validRoutes = result.routes.filter((route) => {
-            // Iterate through each leg and step for detailed path checking
             const passesThroughAccident = route.legs.some((leg) =>
               leg.steps.some((step) =>
                 step.path.some((pathPoint) =>
@@ -183,129 +127,197 @@ const Map: React.FC = () => {
                       google.maps.geometry.spherical.computeDistanceBetween(
                         pathPoint,
                         new google.maps.LatLng(accident.lat, accident.lng)
-                      ) < 70 // 70 meters threshold
+                      ) < 70
                   )
                 )
               )
             );
-            console.log('Route passes through accident:', passesThroughAccident);
             return !passesThroughAccident;
           });
 
-          console.log('Valid routes after filtering:', validRoutes);
-
           if (validRoutes.length > 0) {
             setRoutes(validRoutes);
-            console.log('Added valid routes:', validRoutes);
+            processRoutes(validRoutes);
           } else {
             alert('No alternative routes available that avoid accident areas.');
-            console.warn('No valid routes found that avoid accidents.');
             setRoutes([]);
+            setRouteInfos([]);
           }
         } else if (status === 'ZERO_RESULTS') {
-          console.warn('No routes found between the specified locations.');
           alert('No routes found between the specified locations. Please check your inputs.');
           setRoutes([]);
+          setRouteInfos([]);
         } else if (status === 'NOT_FOUND') {
-          console.error('One or more locations could not be geocoded.');
           alert('One or more locations could not be found. Please check your inputs.');
           setRoutes([]);
+          setRouteInfos([]);
         } else {
-          console.error('Error fetching directions:', status);
           alert('Error fetching directions: ' + status);
           setRoutes([]);
+          setRouteInfos([]);
         }
       }
     );
   };
 
-  // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    calculateRoute(); // Uses current accidentCoords
+  const processRoutes = (routes: google.maps.DirectionsRoute[]) => {
+    const now = new Date();
+    const routeInfos: RouteInfo[] = routes.map((route) => {
+      const duration = route.legs[0].duration?.text || '';
+      const durationInMinutes = route.legs[0].duration?.value ? Math.round(route.legs[0].duration.value / 60) : 0;
+      const arrivalTime = new Date(now.getTime() + (route.legs[0].duration?.value || 0) * 1000);
+      return {
+        duration: `${durationInMinutes} min`,
+        arrivalTime: `Arrive at ${arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+        description: route.summary,
+        distance: route.legs[0].distance?.text || '',
+      };
+    });
+    setRouteInfos(routeInfos);
   };
 
-  if (loadError) {
-    return <div>Error loading maps</div>;
-  }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    calculateRoute();
+  };
 
-  if (!isLoaded) {
-    return <div>Loading Maps...</div>;
-  }
-
-  console.log('Rendering markers:', markers);
-  console.log('Rendering routes:', routes);
+  if (loadError) return <div className='h-full'>Error loading maps</div>;
+  if (!isLoaded) return <Loading />;
 
   return (
-    <div className="map-container">
-      {/* Route Input Form */}
-      <form onSubmit={handleSubmit} className="route-form">
-        {/* Start Location Autocomplete */}
-        <Autocomplete
-          onLoad={(autocomplete) => (originRef.current = autocomplete)}
-          onPlaceChanged={() => {
-            const place = originRef.current?.getPlace();
-            if (place && place.formatted_address) {
-              setStartLocation(place.formatted_address);
-              console.log('Selected start location:', place.formatted_address);
-            } else {
-              console.error('Start location place data is incomplete:', place);
-              alert('Please select a valid start location from the suggestions.');
-            }
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Start location"
-            required
-            className="route-input"
-          />
-        </Autocomplete>
-
-        {/* Destination Autocomplete */}
-        <Autocomplete
-          onLoad={(autocomplete) => (destinationRef.current = autocomplete)}
-          onPlaceChanged={() => {
-            const place = destinationRef.current?.getPlace();
-            if (place && place.formatted_address) {
-              setEndLocation(place.formatted_address);
-              console.log('Selected end location:', place.formatted_address);
-            } else {
-              console.error('End location place data is incomplete:', place);
-              alert('Please select a valid destination from the suggestions.');
-            }
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Destination"
-            required
-            className="route-input"
-          />
-        </Autocomplete>
-
-        <button type="submit" className="route-button">
-          Get Routes
-        </button>
-      </form>
-
-      {/* Google Map */}
+    <div className="relative h-screen w-full">
+      <div 
+        className={`absolute top-1/2 left-0 transform -translate-y-1/2 bg-white shadow-lg transition-all duration-300 ease-in-out z-10 overflow-hidden rounded-xl ${
+          isSidebarOpen ? 'w-80' : 'w-0'
+        }`}
+      >
+        <div className={`p-4 w-80 transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
+          <h2 className="text-2xl font-bold mb-4 text-black text-center">SpeechMaps</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="start" className="block text-sm font-medium text-black">Start Location</label>
+              <Autocomplete
+                onLoad={(autocomplete) => (originRef.current = autocomplete)}
+                onPlaceChanged={() => {
+                  const place = originRef.current?.getPlace();
+                  if (place && place.geometry && place.geometry.location) {
+                    const location = place.geometry.location;
+                    setStartLocation({ lat: location.lat(), lng: location.lng() });
+                  } else {
+                    alert('Please select a valid start location from the suggestions.');
+                  }
+                }}
+              >
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MapPin className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    id="start"
+                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md bg-gray-100 text-black"
+                    placeholder="Enter start location"
+                  />
+                </div>
+              </Autocomplete>
+            </div>
+            <div>
+              <label htmlFor="destination" className="block text-sm font-medium text-black">Destination</label>
+              <Autocomplete
+                onLoad={(autocomplete) => (destinationRef.current = autocomplete)}
+                onPlaceChanged={() => {
+                  const place = destinationRef.current?.getPlace();
+                  if (place && place.geometry && place.geometry.location) {
+                    const location = place.geometry.location;
+                    setEndLocation({ lat: location.lat(), lng: location.lng() });
+                  } else {
+                    alert('Please select a valid destination from the suggestions.');
+                  }
+                }}
+              >
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Navigation className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    id="destination"
+                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md bg-gray-100 text-black"
+                    placeholder="Enter destination"
+                  />
+                </div>
+              </Autocomplete>
+            </div>
+            <div className="flex justify-center">
+              <button
+                type="submit"
+                className="flex items-center px-6 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-200 ease-in-out"
+              >
+                <Route className="mr-2 h-5 w-5" color="#FFFFFF" />
+                Get Routes
+              </button>
+            </div>
+          </form>
+          
+          {routeInfos.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-2 text-black">Routes</h3>
+              <div className="space-y-4">
+                {routeInfos.map((route, index) => (
+                  <div key={index} className="bg-gray-100 p-4 rounded-lg">
+                    <div className="flex items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold`}
+                      style={{ backgroundColor: colors[index % colors.length] }}
+                    >
+                      {index + 1}
+                    </div>
+                      <div className="ml-4">
+                        <div className="flex items-baseline">
+                          <span className="text-xl font-bold text-black">{route.duration}</span>
+                          <span className="ml-2 text-sm text-black">{route.arrivalTime}</span>
+                        </div>
+                        <p className="text-sm text-gray-800">{route.description}</p>
+                        <p className="text-sm text-gray-600">{route.distance}</p>
+                      </div>
+                    </div>
+                    {index === 0 && (
+                      <div className="mt-2">
+                        <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">BEST</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          <VoiceInput />
+        </div>
+      </div>
+      <button
+        className={`absolute top-1/2 transform -translate-y-1/2 bg-white p-2 rounded-r-md shadow-md z-20 transition-all duration-300 ${
+          isSidebarOpen ? 'left-80' : 'left-0'
+        }`}
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+      >
+        {isSidebarOpen ? <ChevronLeft className={"text-black"} size={24} /> : <ChevronRight className={"text-black"} size={24} />}
+      </button>
       <GoogleMap
-        key={`map-${routes.length}`} // Unique key based on the number of routes
-        mapContainerStyle={{ width: '100vw', height: '100vh' }}
+        key={`map-${routes.length}`}
+        mapContainerStyle={{ width: '100%', height: '100%' }}
         center={center}
         zoom={13}
       >
-        {/* Accident Markers */}
+        {startLocation && <Marker position={startLocation} label={{ text: "A", color: "white", fontSize: "20px" }} />}
+        {endLocation && <Marker position={endLocation} label={{ text: "B", color: "white", fontSize: "20px" }} />}
         {markers.map((marker) => (
           <Marker key={marker.id} position={marker.position} />
         ))}
-
-        {/* Display Valid Routes */}
         {routes.length > 0 &&
           routes.map((route, index) => (
             <Polyline
-              key={`${index}-${route.summary}`} // Ensures unique key
+              key={`${index}-${route.summary}`}
               path={route.overview_path.map((point) => ({
                 lat: point.lat(),
                 lng: point.lng(),

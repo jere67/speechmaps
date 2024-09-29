@@ -1,10 +1,10 @@
-// app/components/VoiceInput.tsx
 "use client";
 
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { supabase } from '../lib/supabaseClient';
-import { v4 as uuidv4 } from 'uuid'; // Install uuid package if not already installed
+import { v4 as uuidv4 } from 'uuid';
+import { Video } from 'lucide-react';
 
 const VoiceInput: React.FC = () => {
   const [recording, setRecording] = useState(false);
@@ -93,7 +93,6 @@ const VoiceInput: React.FC = () => {
 
   const extractRoadName = (text: string): string | null => {
     console.log('extractRoadName called with text:', text);
-    // Adjusted regex to be more flexible
     const regex = /on\s+(.+?)(?:\s+heading|\s*$)/i;
     const match = text.match(regex);
     const roadName = match ? match[1].trim() : null;
@@ -163,16 +162,23 @@ const VoiceInput: React.FC = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-4 flex flex-col items-center">
       <button
         onClick={recording ? stopRecording : startRecording}
-        className={`px-4 py-2 rounded ${
-          recording ? 'bg-red-500' : 'bg-green-500'
-        } text-white`}
+        className={`flex items-center justify-center px-6 py-3 text-sm font-medium text-white transition duration-200 ease-in-out ${
+          recording
+            ? 'bg-red-600 hover:bg-red-700'
+            : 'bg-green-600 hover:bg-green-700'
+        } rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
       >
+        <Video className="mr-2 h-5 w-5" />
         {recording ? 'Stop Recording' : 'Start Recording'}
       </button>
-      {transcript && <p className="mt-2">Transcript: {transcript}</p>}
+      {transcript && (
+        <div className="mt-4 w-full">
+          <p className="text-black">Transcript: {transcript}</p>
+        </div>
+      )}
     </div>
   );
 };

@@ -6,9 +6,7 @@ import VoiceInput from '../components/VoiceInput';
 const HomePage: React.FC = () => {
   return (
     <div>
-      <h1>Your Map Application</h1>
       <Map />
-      <VoiceInput />
     </div>
   );
 };
