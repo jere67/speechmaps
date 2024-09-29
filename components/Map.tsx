@@ -170,7 +170,7 @@ const Map: React.FC = () => {
   const processRoutes = (routes: google.maps.DirectionsRoute[]) => {
     const now = new Date();
     const routeInfos: RouteInfo[] = routes.map((route) => {
-      const duration = route.legs[0].duration?.text || '';
+      // const duration = route.legs[0].duration?.text || '';
       const durationInMinutes = route.legs[0].duration?.value ? Math.round(route.legs[0].duration.value / 60) : 0;
       const arrivalTime = new Date(now.getTime() + (route.legs[0].duration?.value || 0) * 1000);
       return {
@@ -345,9 +345,9 @@ const Map: React.FC = () => {
         {markers.map((marker) => (
           <Marker key={marker.id} position={marker.position} icon={{
             url: warningIconUrl,
-            scaledSize: new google.maps.Size(40, 40), // Adjust size as needed
+            scaledSize: new google.maps.Size(40, 40),
             origin: new google.maps.Point(0, 0),
-            anchor: new google.maps.Point(20, 40), // Adjust anchor as needed
+            anchor: new google.maps.Point(20, 40),
           }}
           title="Accident Location"/>
         ))}

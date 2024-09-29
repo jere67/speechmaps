@@ -40,28 +40,23 @@ export async function POST(request: Request) {
 
     console.log('File received:', file.name, file.size, file.type);
 
-    // Get the file data as a buffer
+    //get the file data as a buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     console.log('File buffer created, size:', buffer.length);
 
-    // Create a temporary file path
+    //create and write to temporary file path
     const tempDir = path.join(process.cwd(), 'tmp');
     const tempFilePath = path.join(tempDir, `upload-${Date.now()}.webm`);
     console.log('Temporary file path:', tempFilePath);
-
-    // Ensure the tmp directory exists
     await fs.promises.mkdir(tempDir, { recursive: true });
-
-    // Write the file to the temporary path
     await fs.promises.writeFile(tempFilePath, buffer);
     console.log('File written to disk');
 
     try {
-      // Create a read stream from the file
       const fileStream = fs.createReadStream(tempFilePath);
 
-      // Send the file to the Groq API
+      //send file to the Groq API
       console.log('Sending file to Groq API for transcription');
       const transcription = await groq.audio.transcriptions.create({
         file: fileStream,
@@ -74,7 +69,7 @@ export async function POST(request: Request) {
       console.error('Error transcribing audio:', error);
       return NextResponse.json({ error: 'Error transcribing audio' }, { status: 500 });
     } finally {
-      // Delete the temporary file
+      //delete temporary file
       await fs.promises.unlink(tempFilePath);
       console.log('Temporary file deleted');
     }

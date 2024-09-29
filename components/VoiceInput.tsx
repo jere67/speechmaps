@@ -107,7 +107,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
   const extractRoadName = (text: string): string | null => {
     console.log('extractRoadName called with text:', text);
     
-    // Define common road types
+    //define common road types
     const roadTypes = [
       'road',
       'street',
@@ -169,8 +169,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
       throw new Error('Google Maps API key is not defined.');
     }
 
-    // Determine if the roadAddress includes a city by checking for a comma
-    // If no city is provided, append the default location
+    //if no city is provided, append the default location
     const address = roadAddress.includes(',') ? roadAddress : `${roadAddress}, ${DEFAULT_LOCATION}`;
     console.log('Final address for geocoding:', address);
 
@@ -203,7 +202,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
   const saveReport = async (description: string, latitude: number, longitude: number) => {
     console.log('saveReport called with:', { description, latitude, longitude });
     try {
-      const anonymousUserId = uuidv4(); // Generate a random UUID
+      const anonymousUserId = uuidv4(); //generate a random UUID
   
       const { data, error } = await supabase.from('reports').insert([
         {
