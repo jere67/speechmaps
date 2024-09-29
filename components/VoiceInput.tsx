@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
 import { supabase } from '../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { Video } from 'lucide-react';
@@ -134,7 +133,6 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
             setNavVisible(true);
             setNavMessage('Listening for wake word...');
           } catch (error) {
-            // mandatory restart bug for some reason...?
             console.error('Error restarting recognition:', error);
           }
         }
@@ -166,19 +164,29 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
 
         try {
           console.log('Sending audio to /api/groq');
-          const response = await axios.post('/api/groq', formData, {
+          const response = await fetch('/api/groq', {
+            method: 'POST',
+            body: formData,
             headers: {
-              'Content-Type': 'multipart/form-data',
+              'Accept': 'application/json',
             },
           });
 
-          const transcriptionText: string = response.data.text;
+          if (!response.ok) {
+            console.error('Error transcribing audio:', response.statusText);
+            setNavVisible(true);
+            setNavMessage("Error transcribing audio.");
+            return;
+          }
+
+          const responseData = await response.json();
+          const transcriptionText: string = responseData.text;
           console.log('Transcription received:', transcriptionText);
           setTranscript(transcriptionText);
           await handleTranscript(transcriptionText);
         } catch (error) {
           console.error('Error transcribing audio:', error);
-          setNavVisible(true); 
+          setNavVisible(true);
           setNavMessage("Error transcribing audio.");
         }
       };
@@ -192,7 +200,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
       }, 6000);
     } catch (error) {
       console.error('Error starting recording:', error);
-      setNavVisible(true); 
+      setNavVisible(true);
       setNavMessage("Error starting recording.");
     }
   };
@@ -216,7 +224,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
     console.log('Extracted road name:', roadName);
 
     if (!roadName) {
-      setNavVisible(true); 
+      setNavVisible(true);
       setNavMessage("Could not extract road name from your speech.");
       return;
     }
@@ -227,14 +235,14 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
       await saveReport(text, latitude, longitude);
     } catch (error) {
       console.error('Error handling transcript:', error);
-      setNavVisible(true); 
+      setNavVisible(true);
       setNavMessage("Error handling transcript.");
     }
   };
 
   const extractRoadName = (text: string): string | null => {
     console.log('extractRoadName called with text:', text);
-    
+
     //define common road types
     const roadTypes = [
       'road',
@@ -302,24 +310,23 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
     console.log('Final address for geocoding:', address);
 
     try {
-      const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
-        params: {
-          address,
-          key: apiKey,
-        },
-      });
-      console.log('Geocoding response:', response.data);
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+          address
+        )}&key=${apiKey}`
+      );
+      const responseData = await response.json();
 
-      if (response.data.status === 'OK') {
-        const location = response.data.results[0].geometry.location;
+      if (responseData.status === 'OK') {
+        const location = responseData.results[0].geometry.location;
         console.log('Coordinates found:', location);
         return {
           latitude: location.lat,
           longitude: location.lng,
         };
       } else {
-        console.error('Geocoding API error:', response.data.status);
-        throw new Error('Geocoding API error: ' + response.data.status);
+        console.error('Geocoding API error:', responseData.status);
+        throw new Error('Geocoding API error: ' + responseData.status);
       }
     } catch (error) {
       console.error('Error fetching coordinates:', error);
@@ -331,7 +338,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
     console.log('saveReport called with:', { description, latitude, longitude });
     try {
       const anonymousUserId = uuidv4(); //generate a random UUID
-  
+
       const { data, error } = await supabase.from('reports').insert([
         {
           user_id: anonymousUserId,
@@ -340,20 +347,19 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
           longitude,
         },
       ]);
-  
+
       if (error) {
         console.error('Error saving report:', error);
-        setNavVisible(true); 
+        setNavVisible(true);
         setNavMessage("Error saving report.");
       } else {
         console.log('Report saved successfully:', data);
-        setNavVisible(true); 
+        setNavVisible(true);
         setNavMessage("Report saved successfully!");
-        
       }
     } catch (error) {
       console.error('Exception saving report:', error);
-      setNavVisible(true); 
+      setNavVisible(true);
       setNavMessage("Exception saving report");
     }
   };
