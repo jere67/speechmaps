@@ -164,7 +164,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
 
         try {
           console.log('Sending audio to /api/groq');
-          const response = await fetch('/api/groq', {
+          const response = await fetch('http://localhost:3000/api/groq', {
             method: 'POST',
             body: formData,
             headers: {
