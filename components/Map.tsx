@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabaseClient';
 import { ChevronLeft, ChevronRight, MapPin, Navigation, Route } from 'lucide-react';
 import VoiceInput from './VoiceInput';
 import { Loading } from './ui/Loading';
+import { FloatingNav } from './ui/floating-navbar';
 
 interface Report {
   id: string;
@@ -35,7 +36,10 @@ const Map: React.FC = () => {
   const [routeInfos, setRouteInfos] = useState<RouteInfo[]>([]);
   const [accidentCoords, setAccidentCoords] = useState<google.maps.LatLngLiteral[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [navVisible, setNavVisible] = useState(false);
+  const [navMessage, setNavMessage] = useState("");
 
+  const mapRef = useRef<google.maps.Map | null>(null);
   const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFA500', '#800080'];
 
   const { isLoaded, loadError } = useJsApiLoader({
@@ -77,6 +81,8 @@ const Map: React.FC = () => {
             position: { lat: newReport.latitude!, lng: newReport.longitude! },
           };
           setMarkers((prevMarkers) => [...prevMarkers, newMarker]);
+          setNavVisible(true); 
+          setNavMessage("An accident has been reported near your area.");
           setAccidentCoords((prevCoords) => {
             const updatedCoords = [...prevCoords, newMarker.position];
             calculateRoute(updatedCoords);
@@ -95,7 +101,6 @@ const Map: React.FC = () => {
     const accidents = currentAccidentCoords || accidentCoords;
 
     if (!startLocation || !endLocation) {
-      alert('Please enter both start and destination addresses.');
       return;
     }
 
@@ -115,6 +120,7 @@ const Map: React.FC = () => {
           if (accidents.length === 0) {
             setRoutes(result.routes);
             processRoutes(result.routes);
+            fitMapToRouteBounds(result.routes);
             return;
           }
 
@@ -138,21 +144,22 @@ const Map: React.FC = () => {
           if (validRoutes.length > 0) {
             setRoutes(validRoutes);
             processRoutes(validRoutes);
+            fitMapToRouteBounds(validRoutes);
           } else {
-            alert('No alternative routes available that avoid accident areas.');
+            setNavMessage("No alternative routes available that avoid accident areas.");
             setRoutes([]);
             setRouteInfos([]);
           }
         } else if (status === 'ZERO_RESULTS') {
-          alert('No routes found between the specified locations. Please check your inputs.');
+          setNavMessage("No routes found between the specified locations. Please check your inputs.");
           setRoutes([]);
           setRouteInfos([]);
         } else if (status === 'NOT_FOUND') {
-          alert('One or more locations could not be found. Please check your inputs.');
+          setNavMessage("One or more locations could not be found. Please check your inputs.");
           setRoutes([]);
           setRouteInfos([]);
         } else {
-          alert('Error fetching directions: ' + status);
+          setNavMessage("Error fetching directions.");
           setRoutes([]);
           setRouteInfos([]);
         }
@@ -176,20 +183,41 @@ const Map: React.FC = () => {
     setRouteInfos(routeInfos);
   };
 
+  const fitMapToRouteBounds = (routes: google.maps.DirectionsRoute[]) => {
+    if (!mapRef.current || routes.length === 0) return;
+
+    const bounds = new google.maps.LatLngBounds();
+    routes.forEach((route) => {
+      route.legs.forEach((leg) => {
+        leg.steps.forEach((step) => {
+          step.path.forEach((pathPoint) => {
+            bounds.extend(pathPoint);
+          });
+        });
+      });
+    });
+
+    mapRef.current?.fitBounds(bounds);
+    setCenter(bounds.getCenter().toJSON());
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     calculateRoute();
   };
 
-  if (loadError) return <div className='h-full'>Error loading maps</div>;
+  if (loadError) return <Loading />;
   if (!isLoaded) return <Loading />;
+
+  const warningIconUrl = './images/crash.png';
 
   return (
     <div className="relative h-screen w-full">
+      <div className="relative w-full">
+        <FloatingNav visible={navVisible} setVisible={setNavVisible} navItem={navMessage} />
+      </div>
       <div 
-        className={`absolute top-1/2 left-0 transform -translate-y-1/2 bg-white shadow-lg transition-all duration-300 ease-in-out z-10 overflow-hidden rounded-xl ${
-          isSidebarOpen ? 'w-80' : 'w-0'
-        }`}
+        className={`absolute top-1/2 left-0 transform -translate-y-1/2 bg-white shadow-lg transition-all duration-300 ease-in-out z-10 overflow-hidden rounded-xl ${isSidebarOpen ? 'w-80' : 'w-0'}`}
       >
         <div className={`p-4 w-80 transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
           <h2 className="text-2xl font-bold mb-4 text-black text-center">SpeechMaps</h2>
@@ -204,7 +232,7 @@ const Map: React.FC = () => {
                     const location = place.geometry.location;
                     setStartLocation({ lat: location.lat(), lng: location.lng() });
                   } else {
-                    alert('Please select a valid start location from the suggestions.');
+                    setNavMessage("Please select a valid start location from the suggestions.");
                   }
                 }}
               >
@@ -231,7 +259,7 @@ const Map: React.FC = () => {
                     const location = place.geometry.location;
                     setEndLocation({ lat: location.lat(), lng: location.lng() });
                   } else {
-                    alert('Please select a valid destination from the suggestions.');
+                    setNavMessage("Please select a valid destination from the suggestions.");
                   }
                 }}
               >
@@ -266,12 +294,12 @@ const Map: React.FC = () => {
                 {routeInfos.map((route, index) => (
                   <div key={index} className="bg-gray-100 p-4 rounded-lg">
                     <div className="flex items-center">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold`}
-                      style={{ backgroundColor: colors[index % colors.length] }}
-                    >
-                      {index + 1}
-                    </div>
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold`}
+                        style={{ backgroundColor: colors[index % colors.length] }}
+                      >
+                        {index + 1}
+                      </div>
                       <div className="ml-4">
                         <div className="flex items-baseline">
                           <span className="text-xl font-bold text-black">{route.duration}</span>
@@ -292,7 +320,7 @@ const Map: React.FC = () => {
             </div>
           )}
           
-          <VoiceInput />
+          <VoiceInput setNavVisible={setNavVisible} setNavMessage={setNavMessage} />
         </div>
       </div>
       <button
@@ -308,11 +336,20 @@ const Map: React.FC = () => {
         mapContainerStyle={{ width: '100%', height: '100%' }}
         center={center}
         zoom={13}
+        onLoad={(map) => {
+          mapRef.current = map;
+        }}
       >
         {startLocation && <Marker position={startLocation} label={{ text: "A", color: "white", fontSize: "20px" }} />}
         {endLocation && <Marker position={endLocation} label={{ text: "B", color: "white", fontSize: "20px" }} />}
         {markers.map((marker) => (
-          <Marker key={marker.id} position={marker.position} />
+          <Marker key={marker.id} position={marker.position} icon={{
+            url: warningIconUrl,
+            scaledSize: new google.maps.Size(40, 40), // Adjust size as needed
+            origin: new google.maps.Point(0, 0),
+            anchor: new google.maps.Point(20, 40), // Adjust anchor as needed
+          }}
+          title="Accident Location"/>
         ))}
         {routes.length > 0 &&
           routes.map((route, index) => (

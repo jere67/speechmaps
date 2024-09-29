@@ -6,11 +6,20 @@ import { supabase } from '../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { Video } from 'lucide-react';
 
-const VoiceInput: React.FC = () => {
+interface VoiceInputProps {
+  setNavVisible: (visible: boolean) => void;
+  setNavMessage: (navItem: string) => void;
+}
+
+const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage }) => {
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  const DEFAULT_CITY = 'Ann Arbor';
+  const DEFAULT_STATE = 'MI';
+  const DEFAULT_LOCATION = `${DEFAULT_CITY}, ${DEFAULT_STATE}`;
 
   const startRecording = async () => {
     console.log('startRecording called');
@@ -48,7 +57,8 @@ const VoiceInput: React.FC = () => {
           await handleTranscript(transcriptionText);
         } catch (error) {
           console.error('Error transcribing audio:', error);
-          alert('Error transcribing audio: ' + error);
+          setNavVisible(true); 
+          setNavMessage("Error transcribing audio.");
         }
       };
 
@@ -57,7 +67,8 @@ const VoiceInput: React.FC = () => {
       setRecording(true);
     } catch (error) {
       console.error('Error starting recording:', error);
-      alert('Error starting recording: ' + error);
+      setNavVisible(true); 
+      setNavMessage("Error starting recording.");
     }
   };
 
@@ -77,7 +88,8 @@ const VoiceInput: React.FC = () => {
     console.log('Extracted road name:', roadName);
 
     if (!roadName) {
-      alert('Could not extract road name from your speech.');
+      setNavVisible(true); 
+      setNavMessage("Could not extract road name from your speech.");
       return;
     }
 
@@ -87,31 +99,85 @@ const VoiceInput: React.FC = () => {
       await saveReport(text, latitude, longitude);
     } catch (error) {
       console.error('Error handling transcript:', error);
-      alert('Error handling transcript: ' + error);
+      setNavVisible(true); 
+      setNavMessage("Error handling transcript.");
     }
   };
 
   const extractRoadName = (text: string): string | null => {
     console.log('extractRoadName called with text:', text);
-    const regex = /on\s+(.+?)(?:\s+heading|\s*$)/i;
-    const match = text.match(regex);
-    const roadName = match ? match[1].trim() : null;
-    console.log('Road name extracted:', roadName);
-    return roadName;
+    
+    // Define common road types
+    const roadTypes = [
+      'road',
+      'street',
+      'avenue',
+      'boulevard',
+      'lane',
+      'drive',
+      'court',
+      'place',
+      'terrace',
+      'parkway',
+      'commons',
+      'circle',
+      'highway',
+      'expressway',
+      'way',
+      'route',
+    ];
+
+    const roadTypePattern = roadTypes.join('|');
+
+    const regexPrimary = new RegExp(
+      `(?:on|at|in)\\s+([A-Za-z\\s]+)\\s+(${roadTypePattern})(?:\\s*(?:,|in)\\s*([A-Za-z\\s]+))?`,
+      'i'
+    );
+
+    const regexSecondary = new RegExp(
+      `([A-Za-z\\s]+)\\s+(${roadTypePattern})(?:\\s*(?:,|in)\\s*([A-Za-z\\s]+))?`,
+      'i'
+    );
+
+    let match = text.match(regexPrimary);
+    if (match && match.length >= 3) {
+      const roadName = `${match[1].trim()} ${match[2].trim()}`;
+      const cityName = match[3] ? match[3].trim() : '';
+      const fullAddress = cityName ? `${roadName}, ${cityName}` : roadName;
+      console.log('Road name extracted using primary regex:', fullAddress);
+      return fullAddress;
+    }
+
+    match = text.match(regexSecondary);
+    if (match && match.length >= 3) {
+      const roadName = `${match[1].trim()} ${match[2].trim()}`;
+      const cityName = match[3] ? match[3].trim() : '';
+      const fullAddress = cityName ? `${roadName}, ${cityName}` : roadName;
+      console.log('Road name extracted using secondary regex:', fullAddress);
+      return fullAddress;
+    }
+
+    console.log('No road name matched.');
+    return null;
   };
 
-  const getCoordinatesFromRoadName = async (roadName: string) => {
-    console.log('getCoordinatesFromRoadName called with roadName:', roadName);
+  const getCoordinatesFromRoadName = async (roadAddress: string) => {
+    console.log('getCoordinatesFromRoadName called with roadAddress:', roadAddress);
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
       console.error('Google Maps API key is not defined.');
       throw new Error('Google Maps API key is not defined.');
     }
 
+    // Determine if the roadAddress includes a city by checking for a comma
+    // If no city is provided, append the default location
+    const address = roadAddress.includes(',') ? roadAddress : `${roadAddress}, ${DEFAULT_LOCATION}`;
+    console.log('Final address for geocoding:', address);
+
     try {
       const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
         params: {
-          address: roadName,
+          address,
           key: apiKey,
         },
       });
@@ -150,14 +216,18 @@ const VoiceInput: React.FC = () => {
   
       if (error) {
         console.error('Error saving report:', error);
-        alert('Error saving report: ' + error);
+        setNavVisible(true); 
+        setNavMessage("Error saving report.");
       } else {
         console.log('Report saved successfully:', data);
-        alert('Report saved successfully.');
+        setNavVisible(true); 
+        setNavMessage("Report saved successfully!");
+        
       }
     } catch (error) {
       console.error('Exception saving report:', error);
-      alert('Exception saving report: ' + error);
+      setNavVisible(true); 
+      setNavMessage("Exception saving report");
     }
   };
 
