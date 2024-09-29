@@ -8,8 +8,8 @@ import path from 'path';
 
 export const runtime = 'nodejs';
 
-const groqApiKey = process.env.GROQ_API_KEY;
-const base_url = process.env.GROQ_API_URL;
+const groqApiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+const base_url = process.env.NEXT_PUBLIC_GROQ_API_URL;
 
 if (!groqApiKey) {
   console.error('GROQ_API_KEY is not defined in environment variables.');

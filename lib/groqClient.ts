@@ -2,7 +2,7 @@
 
 import Groq from 'groq-sdk';
 
-const groqApiKey = process.env.GROQ_API_KEY;
+const groqApiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
 
 if (!groqApiKey) {
   console.error('GROQ_API_KEY is not defined in environment variables.');
