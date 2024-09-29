@@ -1,10 +1,9 @@
-import NextLogo from "./next-logo";
-import SupabaseLogo from "./supabase-logo";
+import React from 'react'
 
 const Hero = () => {
   return (
     <></>
-  );
+  )
 }
 
 export default Hero
