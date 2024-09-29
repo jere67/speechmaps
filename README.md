@@ -27,6 +27,7 @@ SpeechMaps is an innovative navigation solution that optimizes your travel route
 - 🃏 Aceternity UI - accessible UI components
 - 🎨 Animation - using Framer Motion
 - 🗣️ Speech recognition with Groq AI
+- 💬 Wake-word detection with Web Speech API + Picovoice AI
 - 📍 Smart map integration with Google Maps API
 - 🖇️ Deployed with Vercel
 

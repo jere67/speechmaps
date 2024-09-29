@@ -1,10 +1,43 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { supabase } from '../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { Video } from 'lucide-react';
+
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition | undefined;
+    webkitSpeechRecognition: typeof SpeechRecognition | undefined;
+  }
+
+  var SpeechRecognition: any;
+  var webkitSpeechRecognition: any;
+}
+
+type ISpeechRecognition = {
+  new (): SpeechRecognitionInstance;
+};
+
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: any) => void) | null;
+  onend: (() => void) | null;
+}
+
+interface SpeechRecognitionEvent {
+  results: ArrayLike<{
+    [index: number]: {
+      transcript: string;
+    };
+  }>;
+}
 
 interface VoiceInputProps {
   setNavVisible: (visible: boolean) => void;
@@ -14,12 +47,100 @@ interface VoiceInputProps {
 const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage }) => {
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
+  const [statusMessage, setStatusMessage] = useState('Initializing...');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const isRecognitionActive = useRef(false);
 
   const DEFAULT_CITY = 'Ann Arbor';
   const DEFAULT_STATE = 'MI';
   const DEFAULT_LOCATION = `${DEFAULT_CITY}, ${DEFAULT_STATE}`;
+
+  const wakeWord = "speech maps";
+  useEffect(() => {
+    const initializeRecognition = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        const SpeechRecognition: ISpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          console.error("Web Speech API is not supported in this browser.");
+          setNavVisible(true);
+          setNavMessage('Web Speech API not supported in this browser.');
+          return;
+        }
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+          const spokenText = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+          console.log('Wake word detection result:', spokenText);
+          if (spokenText.includes(wakeWord)) {
+            console.log('Wake word detected, starting recording...');
+            setNavVisible(true);
+            setNavMessage('SpeechMaps is listening...');
+            startRecording();
+          }
+        };
+        recognition.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            setNavVisible(true);
+            setNavMessage('Microphone access not allowed. Please check your browser settings.');
+            return;
+          }
+          isRecognitionActive.current = false;
+          restartRecognition();
+        };
+
+        recognition.onend = () => {
+          console.log('Speech recognition ended, restarting...');
+          isRecognitionActive.current = false;
+          restartRecognition();
+        };
+
+        recognition.start();
+        isRecognitionActive.current = true;
+        console.log('Listening for wake word...');
+        setNavVisible(true);
+        setNavMessage('Listening for wake word...');
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        setNavVisible(true);
+        setNavMessage('Error accessing microphone. Please allow microphone access in your browser settings.');
+      }
+    };
+    initializeRecognition();
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        isRecognitionActive.current = false;
+      }
+    };
+  }, []);
+
+  const restartRecognition = () => {
+    if (recognitionRef.current && !isRecognitionActive.current) {
+      setTimeout(() => {
+        if (recognitionRef.current && !isRecognitionActive.current) {
+          try {
+            recognitionRef.current.start();
+            isRecognitionActive.current = true;
+            console.log('Recognition restarted');
+            setNavVisible(true);
+            setNavMessage('Listening for wake word...');
+          } catch (error) {
+            // mandatory restart bug for some reason...?
+            console.error('Error restarting recognition:', error);
+          }
+        }
+      }, 1000); //adding a delay of 1000 ms before mandatory restart
+    }
+  };
 
   const startRecording = async () => {
     console.log('startRecording called');
@@ -51,7 +172,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
             },
           });
 
-          const transcriptionText = response.data.text;
+          const transcriptionText: string = response.data.text;
           console.log('Transcription received:', transcriptionText);
           setTranscript(transcriptionText);
           await handleTranscript(transcriptionText);
@@ -65,6 +186,10 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
       mediaRecorder.start();
       console.log('Recording started');
       setRecording(true);
+
+      setTimeout(() => {
+        stopRecording();
+      }, 6000);
     } catch (error) {
       console.error('Error starting recording:', error);
       setNavVisible(true); 
@@ -77,6 +202,9 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setRecording(false);
+      setNavVisible(true);
+      setNavMessage('Listening for wake word...');
+      restartRecognition(); //resume wake-word detection after recording stops
     } else {
       console.warn('mediaRecorderRef.current is null');
     }
@@ -245,7 +373,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
       </button>
       {transcript && (
         <div className="mt-4 w-full">
-          <p className="text-black">Transcript: {transcript}</p>
+          <p className="text-black">SpeechMaps heard: {transcript}</p>
         </div>
       )}
     </div>
