@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import axios from 'axios';
 import { supabase } from '../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { Video } from 'lucide-react';
+import Groq from 'groq-sdk';
 
 declare global {
   interface Window {
@@ -15,6 +17,7 @@ declare global {
   var webkitSpeechRecognition: any;
 }
 
+//speechRecognition interface manually
 type ISpeechRecognition = {
   new (): SpeechRecognitionInstance;
 };
@@ -57,6 +60,16 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
   const DEFAULT_LOCATION = `${DEFAULT_CITY}, ${DEFAULT_STATE}`;
 
   const wakeWord = "speech maps";
+
+  const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+
+  if (!apiKey) {
+    console.error('NEXT_PUBLIC_GROQ_API_KEY is not defined in environment variables.');
+    throw new Error('NEXT_PUBLIC_GROQ_API_KEY is not defined in environment variables.');
+  }
+
+  const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true })
+
   useEffect(() => {
     const initializeRecognition = async () => {
       try {
@@ -159,31 +172,21 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
         console.log('Audio blob created:', audioBlob);
         audioChunksRef.current = [];
 
-        const formData = new FormData();
-        formData.append('file', audioBlob, 'audio.webm');
-
         try {
-          console.log('Sending audio to /api/groq');
-          const response = await fetch('/api/groq', {
-            method: 'POST',
-            body: formData,
-            headers: {
-              'Accept': 'application/json',
-            },
+          console.log('Sending audio to Groq for transcription');
+
+          const file = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
+
+          const transcription = await groq.audio.transcriptions.create({
+            file: file,
+            model: 'whisper-large-v3',
+            language: 'en',
+            response_format: 'json',
           });
 
-          if (!response.ok) {
-            console.error('Error transcribing audio:', response.statusText);
-            setNavVisible(true);
-            setNavMessage("Error transcribing audio.");
-            return;
-          }
-
-          const responseData = await response.json();
-          const transcriptionText: string = responseData.text;
-          console.log('Transcription received:', transcriptionText);
-          setTranscript(transcriptionText);
-          await handleTranscript(transcriptionText);
+          console.log('Transcription received:', transcription.text);
+          setTranscript(transcription.text);
+          await handleTranscript(transcription.text);
         } catch (error) {
           console.error('Error transcribing audio:', error);
           setNavVisible(true);
@@ -242,7 +245,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
 
   const extractRoadName = (text: string): string | null => {
     console.log('extractRoadName called with text:', text);
-
+    
     //define common road types
     const roadTypes = [
       'road',
@@ -310,23 +313,24 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
     console.log('Final address for geocoding:', address);
 
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-          address
-        )}&key=${apiKey}`
-      );
-      const responseData = await response.json();
+      const response = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+        params: {
+          address,
+          key: apiKey,
+        },
+      });
+      console.log('Geocoding response:', response.data);
 
-      if (responseData.status === 'OK') {
-        const location = responseData.results[0].geometry.location;
+      if (response.data.status === 'OK') {
+        const location = response.data.results[0].geometry.location;
         console.log('Coordinates found:', location);
         return {
           latitude: location.lat,
           longitude: location.lng,
         };
       } else {
-        console.error('Geocoding API error:', responseData.status);
-        throw new Error('Geocoding API error: ' + responseData.status);
+        console.error('Geocoding API error:', response.data.status);
+        throw new Error('Geocoding API error: ' + response.data.status);
       }
     } catch (error) {
       console.error('Error fetching coordinates:', error);
@@ -338,7 +342,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
     console.log('saveReport called with:', { description, latitude, longitude });
     try {
       const anonymousUserId = uuidv4(); //generate a random UUID
-
+  
       const { data, error } = await supabase.from('reports').insert([
         {
           user_id: anonymousUserId,
@@ -347,19 +351,20 @@ const VoiceInput: React.FC<VoiceInputProps> = ({ setNavVisible, setNavMessage })
           longitude,
         },
       ]);
-
+  
       if (error) {
         console.error('Error saving report:', error);
-        setNavVisible(true);
+        setNavVisible(true); 
         setNavMessage("Error saving report.");
       } else {
         console.log('Report saved successfully:', data);
-        setNavVisible(true);
+        setNavVisible(true); 
         setNavMessage("Report saved successfully!");
+        
       }
     } catch (error) {
       console.error('Exception saving report:', error);
-      setNavVisible(true);
+      setNavVisible(true); 
       setNavMessage("Exception saving report");
     }
   };

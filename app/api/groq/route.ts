@@ -38,12 +38,10 @@ export async function POST(request: Request) {
 
     console.log('File received:', file.name, file.size, file.type);
 
-    // Get the file data as a buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     console.log('File buffer created, size:', buffer.length);
 
-    // Create and write to temporary file path
     const tempDir = path.join(process.cwd(), 'tmp');
     const tempFilePath = path.join(tempDir, `upload-${Date.now()}.webm`);
     console.log('Temporary file path:', tempFilePath);
@@ -60,14 +58,14 @@ export async function POST(request: Request) {
       formData.append('response_format', 'json');
       formData.append('language', 'en');
 
-      // Send file to the Groq API
+      //send file to the Groq API
       console.log('Sending file to Groq API for transcription');
       const response = await fetch(`${base_url}/openai/v1/audio/transcriptions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${groqApiKey}`,
         },
-        body: formData as any, // Cast to any to avoid TypeScript issues
+        body: formData as any,
       });
 
       if (!response.ok) {
@@ -82,7 +80,7 @@ export async function POST(request: Request) {
       console.error('Error transcribing audio:', error);
       return NextResponse.json({ error: 'Error transcribing audio' }, { status: 500 });
     } finally {
-      // Delete temporary file
+      //delet temporary file
       await fs.promises.unlink(tempFilePath);
       console.log('Temporary file deleted');
     }
